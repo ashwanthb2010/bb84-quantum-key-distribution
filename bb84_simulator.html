@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unbreakable Light · A BB84 Quantum Key Exchange</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap');
+
+  :root{
+    --void: #0A0D14;
+    --panel: #121826;
+    --panel-alt: #19212F;
+    --panel-line: #262f42;
+    --rect: #4DD8E8;
+    --rect-dim: #1f4d55;
+    --diag: #B57BF5;
+    --diag-dim: #402a5c;
+    --green: #6EE7A0;
+    --red: #FF6B6B;
+    --text: #EAF0FA;
+    --muted: #8592AD;
+    --faint: #4B5670;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; background:var(--void); color:var(--text); font-family:'Inter',sans-serif; }
+  ::selection{ background:var(--diag); color:#fff; }
+
+  .wrap{ max-width:1180px; margin:0 auto; padding:28px 20px 80px; }
+
+  /* ---------- HERO ---------- */
+  .hero{
+    display:flex; justify-content:space-between; align-items:center; gap:24px;
+    border-bottom:1px solid var(--panel-line); padding-bottom:22px; margin-bottom:26px;
+    flex-wrap:wrap;
+  }
+  .hero-text .eyebrow{
+    font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.18em; text-transform:uppercase;
+    color:var(--diag); margin:0 0 8px;
+  }
+  .hero-text h1{
+    font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:clamp(28px,4vw,42px);
+    margin:0 0 8px; letter-spacing:-0.01em;
+  }
+  .hero-text p{ margin:0; color:var(--muted); font-size:15px; max-width:520px; line-height:1.5; }
+  canvas#ambient{ width:220px; height:64px; border-radius:8px; background:var(--panel); border:1px solid var(--panel-line); }
+
+  /* ---------- MODE TABS ---------- */
+  .tabs{ display:flex; gap:8px; margin-bottom:20px; }
+  .tab{
+    font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:14px;
+    background:var(--panel); border:1px solid var(--panel-line); color:var(--muted);
+    padding:10px 18px; border-radius:10px; cursor:pointer; transition:all .15s ease;
+  }
+  .tab.active{ color:var(--void); background:var(--diag); border-color:var(--diag); }
+  .tab:hover:not(.active){ border-color:var(--diag); color:var(--text); }
+
+  /* ---------- STAGE ---------- */
+  .stage{
+    position:relative; background:var(--panel); border:1px solid var(--panel-line); border-radius:16px;
+    padding:18px; margin-bottom:18px; overflow:hidden;
+  }
+  .stage-labels{ display:flex; justify-content:space-between; padding:0 6px 6px; }
+  .station-label{ font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:14px; display:flex; align-items:center; gap:8px;}
+  .basis-tag{
+    font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:11px; letter-spacing:.02em;
+    color:var(--faint); background:var(--panel-alt); border:1px solid var(--panel-line);
+    padding:2px 8px; border-radius:20px; transition:color .15s ease, border-color .15s ease, background .15s ease;
+  }
+  .basis-tag.rect{ color:var(--rect); border-color:var(--rect); background:var(--rect-dim); }
+  .basis-tag.diag{ color:var(--diag); border-color:var(--diag); background:var(--diag-dim); }
+  .dot{ width:9px; height:9px; border-radius:50%; }
+  .dot.alice{ background:var(--diag); }
+  .dot.bob{ background:var(--rect); }
+  .dot.eve{ background:var(--red); }
+  canvas#beam{ width:100%; height:220px; display:block; border-radius:10px; background:
+    radial-gradient(ellipse at 50% 50%, #101828 0%, #0A0E17 70%); }
+
+  .eve-toggle{
+    position:absolute; top:16px; left:50%; transform:translateX(-50%);
+    font-family:'IBM Plex Mono',monospace; font-size:12px; display:flex; align-items:center; gap:8px;
+    background:rgba(10,13,20,.7); border:1px solid var(--panel-line); padding:6px 12px; border-radius:20px;
+    z-index:5;
+  }
+  .switch{ width:34px; height:18px; border-radius:10px; background:var(--panel-alt); border:1px solid var(--panel-line); position:relative; cursor:pointer; }
+  .switch.on{ background:var(--red); }
+  .switch::after{ content:''; position:absolute; width:14px; height:14px; border-radius:50%; background:#fff; top:1px; left:1px; transition:left .15s ease; }
+  .switch.on::after{ left:17px; }
+
+  /* ---------- CONTROLS ---------- */
+  .controls{
+    display:flex; flex-wrap:wrap; gap:14px; align-items:center; background:var(--panel);
+    border:1px solid var(--panel-line); border-radius:16px; padding:16px 18px; margin-bottom:18px;
+  }
+  .ctrl-group{ display:flex; align-items:center; gap:10px; }
+  label.small{ font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--muted); }
+  input[type=range]{ accent-color:var(--diag); width:120px; }
+  button.primary{
+    font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:14px; color:var(--void);
+    background:var(--rect); border:none; padding:11px 20px; border-radius:10px; cursor:pointer;
+    transition:transform .1s ease, opacity .15s ease;
+  }
+  button.primary:hover{ transform:translateY(-1px); }
+  button.primary:disabled{ opacity:.4; cursor:not-allowed; transform:none; }
+  button.ghost{
+    font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:13px; color:var(--muted);
+    background:transparent; border:1px solid var(--panel-line); padding:10px 16px; border-radius:10px; cursor:pointer;
+  }
+  button.ghost:hover{ color:var(--text); border-color:var(--diag); }
+
+  .run-caption{
+    font-size:12.5px; color:var(--faint); margin:-10px 0 18px; padding:0 4px; line-height:1.5; max-width:640px;
+  }
+
+  /* ---------- GAME PANEL (Eve mode) ---------- */
+  .game-panel{ display:none; }
+  .game-panel.active{ display:block; }
+  .chips-row{ display:flex; gap:16px; align-items:center; flex-wrap:wrap; margin-bottom:14px; }
+  .chip{
+    font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:14px;
+    padding:14px 18px; border-radius:12px; cursor:grab; user-select:none; display:flex; align-items:center; gap:10px;
+    border:1.5px solid transparent; transition:all .12s ease;
+  }
+  .chip.rect{ background:var(--rect-dim); color:var(--rect); border-color:var(--rect); }
+  .chip.diag{ background:var(--diag-dim); color:var(--diag); border-color:var(--diag); }
+  .chip.armed{ box-shadow:0 0 0 3px rgba(255,255,255,.15); transform:scale(1.04); }
+  .chip:active{ cursor:grabbing; }
+  .glyph{ font-size:18px; }
+
+  .slot{
+    width:100%; min-height:78px; border-radius:12px; border:2px dashed var(--panel-line);
+    display:flex; align-items:center; justify-content:center; gap:14px; font-family:'IBM Plex Mono',monospace;
+    font-size:13px; color:var(--faint); transition:all .15s ease; cursor:pointer;
+  }
+  .slot.dragover{ border-color:var(--diag); background:rgba(181,123,245,0.08); color:var(--diag); }
+  .slot.empty::before{ content:'incoming photon — drag or tap a basis to intercept'; }
+  .slot.filled{ border-style:solid; border-color:var(--green); color:var(--text); }
+
+  /* ---------- NARRATION ---------- */
+  .narration{
+    display:flex; align-items:center; gap:10px; background:var(--panel); border:1px solid var(--panel-line);
+    border-radius:12px; padding:12px 16px; margin-bottom:18px; font-family:'IBM Plex Mono',monospace;
+    font-size:13px; color:var(--text); min-height:20px;
+  }
+  .narration-dot{ width:8px; height:8px; border-radius:50%; background:var(--diag); flex:none; animation:pulse-dot 1.4s ease-in-out infinite; }
+  @keyframes pulse-dot{ 0%,100%{ opacity:.4; transform:scale(.8);} 50%{ opacity:1; transform:scale(1.15);} }
+  #narrationText{ transition:opacity .12s ease; }
+
+  /* ---------- KEY STRIP ---------- */
+  .key-strip{ display:none; align-items:center; gap:10px; flex-wrap:wrap; background:var(--panel);
+    border:1px solid var(--panel-line); border-radius:14px; padding:12px 16px; margin-bottom:18px; }
+  .key-glyph{ font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:15px; background:var(--panel-alt);
+    border:1px solid var(--green); color:var(--green); padding:4px 9px; border-radius:7px; animation:key-pop .25s ease; }
+  @keyframes key-pop{ from{ transform:scale(.5); opacity:0;} to{ transform:scale(1); opacity:1;} }
+
+  /* ---------- LOG ROW STATES (sifting / replay) ---------- */
+  tbody tr{ position:relative; }
+  tbody tr.kept-flow{ background:rgba(110,231,160,.08); transition:background .4s ease; }
+  tbody tr.discarded-fade{ opacity:.32; transition:opacity .4s ease; }
+  tbody tr.replay-highlight{ outline:2px solid var(--red); background:rgba(255,107,107,.08); }
+
+  .discard-stamp{
+    position:absolute; left:0; right:0; top:50%; transform:translateY(-50%) rotate(-3deg) scale(.85);
+    text-align:center; font-family:'Space Grotesk',sans-serif; font-weight:800; font-size:22px;
+    letter-spacing:.22em; color:var(--red); opacity:0; pointer-events:none; z-index:3;
+    text-shadow:0 0 16px rgba(255,107,107,.55);
+    transition:opacity .35s ease, transform .35s ease;
+  }
+  .discard-stamp.show{ opacity:.6; transform:translateY(-50%) rotate(-3deg) scale(1); }
+
+  .sift-note{
+    display:none; background:var(--panel-alt); border:1px solid var(--panel-line); border-left:3px solid var(--diag);
+    border-radius:0 12px 12px 0; padding:12px 16px; margin:-6px 0 18px; font-size:13px; color:var(--muted); line-height:1.55;
+  }
+  .sift-note.show{ display:block; }
+  .sift-note b{ color:var(--text); }
+
+  /* ---------- MISSION REPORT ---------- */
+  .mission-report{ display:none; background:var(--panel); border:1px solid var(--panel-line); border-radius:16px;
+    padding:20px; margin-bottom:18px; opacity:0; transform:translateY(6px); transition:opacity .35s ease, transform .35s ease; }
+  .mission-report.show{ display:block; opacity:1; transform:translateY(0); }
+  .mr-header{ font-family:'Space Grotesk',sans-serif; font-weight:700; letter-spacing:.08em; font-size:13px; color:var(--muted); margin-bottom:14px; }
+  .mr-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:12px; margin-bottom:14px; }
+  .mr-item{ background:var(--panel-alt); border:1px solid var(--panel-line); border-radius:12px; padding:12px 14px; }
+  .mr-label{ font-family:'IBM Plex Mono',monospace; font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin-bottom:6px; }
+  .mr-value{ font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:22px; }
+  .mr-status{ display:none; padding:14px 16px; border-radius:12px; font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:14px; line-height:1.5; }
+  .mr-status.show{ display:block; }
+  .mr-status.caught{ background:rgba(255,107,107,.12); color:var(--red); border:1px solid rgba(255,107,107,.35); }
+  .mr-status.escaped{ background:rgba(110,231,160,.1); color:var(--green); border:1px solid rgba(110,231,160,.35); }
+
+  /* ---------- STATS ---------- */
+  .stats-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:18px; }
+  .stat-card{ background:var(--panel); border:1px solid var(--panel-line); border-radius:14px; padding:16px; }
+  .stat-card .label{ font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin-bottom:6px; }
+  .stat-card .value{ font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:26px; }
+  .stat-card .value.red{ color:var(--red); }
+  .stat-card .value.green{ color:var(--green); }
+  .stat-card .sub{ font-size:11px; color:var(--faint); margin-top:4px; font-family:'IBM Plex Mono',monospace; }
+
+  .banner{
+    padding:14px 18px; border-radius:12px; font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:15px;
+    margin-bottom:18px; display:none; align-items:center; gap:10px;
+  }
+  .banner.show{ display:flex; }
+  .banner.caught{ background:rgba(255,107,107,.12); color:var(--red); border:1px solid rgba(255,107,107,.35); }
+  .banner.escaped{ background:rgba(110,231,160,.1); color:var(--green); border:1px solid rgba(110,231,160,.35); }
+
+  /* ---------- LOG ---------- */
+  .log-wrap{ background:var(--panel); border:1px solid var(--panel-line); border-radius:16px; padding:6px 0 0; margin-bottom:18px; max-height:280px; overflow:auto; }
+  table{ width:100%; border-collapse:collapse; font-family:'IBM Plex Mono',monospace; font-size:12.5px; }
+  thead th{ position:sticky; top:0; background:var(--panel); text-align:left; padding:10px 14px; color:var(--muted); font-weight:500; border-bottom:1px solid var(--panel-line); }
+  tbody td{ padding:8px 14px; border-bottom:1px solid rgba(255,255,255,.03); color:var(--text); }
+  tbody tr:last-child{ background:rgba(181,123,245,.06); }
+  .pill{ padding:2px 7px; border-radius:6px; font-weight:600; }
+  .pill.match{ background:rgba(110,231,160,.12); color:var(--green); }
+  .pill.mismatch{ background:rgba(255,255,255,.04); color:var(--faint); }
+  .pill.check{ background:rgba(255,107,107,.12); color:var(--red); }
+  .pill.error{ background:var(--red); color:#1a0000; }
+
+  /* ---------- LEGEND ---------- */
+  details.legend{ background:var(--panel); border:1px solid var(--panel-line); border-radius:16px; padding:16px 18px; }
+  details.legend summary{ cursor:pointer; font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:14px; }
+  .legend-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; margin-top:14px; font-size:13px; color:var(--muted); line-height:1.5; }
+  .legend-grid b{ color:var(--text); }
+  table.basis-table{ width:100%; max-width:420px; border-collapse:collapse; margin-top:16px; font-family:'IBM Plex Mono',monospace; font-size:13px; }
+  table.basis-table th{ text-align:left; padding:8px 12px; color:var(--muted); font-weight:500; border-bottom:1px solid var(--panel-line); }
+  table.basis-table td{ padding:8px 12px; border-bottom:1px solid rgba(255,255,255,.04); color:var(--text); }
+  table.basis-table tr:last-child td{ border-bottom:none; }
+  .basis-table-glyph{ display:inline-block; width:16px; text-align:center; font-weight:700; margin-right:4px; }
+
+  @media (prefers-reduced-motion: reduce){ *{ animation:none !important; transition:none !important; } }
+  @media (max-width:640px){ canvas#ambient{ display:none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hero">
+    <div class="hero-text">
+      <p class="eyebrow">Quantum Cryptography · Protocol Demo</p>
+      <h1>Unbreakable Light</h1>
+      <p>Watch Alice and Bob build a secret key from polarized photons — and see exactly why an eavesdropper can't listen in without leaving a trace. This is BB84, the original quantum key exchange.</p>
+    </div>
+    <canvas id="ambient" width="220" height="64"></canvas>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" data-mode="explore">Protocol Explorer</button>
+    <button class="tab" data-mode="game">Intercept Mission</button>
+  </div>
+
+  <div class="stage">
+    <div class="eve-toggle" id="exploreToggleWrap">
+      <span>EVE INTERCEPTING</span>
+      <div class="switch" id="eveSwitch"></div>
+    </div>
+    <div class="stage-labels">
+      <span class="station-label"><span class="dot alice"></span>Alice <span class="basis-tag" id="aliceBasisTag">basis: —</span></span>
+      <span class="station-label"><span class="dot eve"></span>Eve <span class="basis-tag" id="eveBasisTag">basis: —</span></span>
+      <span class="station-label"><span class="dot bob"></span>Bob <span class="basis-tag" id="bobBasisTag">basis: —</span></span>
+    </div>
+    <canvas id="beam" width="1100" height="220"></canvas>
+  </div>
+
+  <div class="narration" id="narration">
+    <span class="narration-dot"></span>
+    <span id="narrationText">Ready — press Start Transmission to begin.</span>
+  </div>
+
+  <div class="controls">
+    <div class="ctrl-group">
+      <label class="small">PHOTONS / ROUND</label>
+      <input type="range" id="nSlider" min="8" max="32" value="16" step="1">
+      <span class="small" id="nVal" style="color:var(--text)">16</span>
+    </div>
+    <div class="ctrl-group" id="speedGroup">
+      <label class="small">SPEED</label>
+      <input type="range" id="speedSlider" min="1" max="4" value="1" step="1">
+    </div>
+    <button class="primary" id="runBtn">Start Transmission</button>
+    <button class="ghost" id="resetBtn">Reset</button>
+    <button class="ghost" id="replayBtn" style="display:none">🔍 Replay Errors</button>
+  </div>
+  <p class="run-caption">Each transmission sends a fresh batch of photons from Alice to Bob, one at a time — watch the narration below the beam to follow every step of the exchange in real time.</p>
+
+  <div class="game-panel" id="gamePanel">
+    <div class="chips-row">
+      <div class="chip rect" draggable="true" data-basis="rect"><span class="glyph">⊕</span> Rectilinear (—  |)</div>
+      <div class="chip diag" draggable="true" data-basis="diag"><span class="glyph">⊗</span> Diagonal (╱  ╲)</div>
+      <span class="small" style="color:var(--faint)">drag a chip onto the slot below, or tap a chip then tap the slot</span>
+    </div>
+    <div class="slot empty" id="dropSlot"></div>
+  </div>
+
+  <div class="banner" id="banner"></div>
+
+  <div class="stats-grid">
+    <div class="stat-card"><div class="label">Photons Sent</div><div class="value" id="statSent">0</div></div>
+    <div class="stat-card"><div class="label">Sifted Key Bits</div><div class="value" id="statSifted">0</div></div>
+    <div class="stat-card"><div class="label">QBER (error rate)</div><div class="value" id="statQber">—</div></div>
+    <div class="stat-card"><div class="label" id="scoreLabel">Round Score</div><div class="value green" id="statScore">0</div></div>
+    <div class="stat-card" id="streakCard" style="display:none"><div class="label">Best Escape Streak</div><div class="value" id="statStreak">0</div></div>
+  </div>
+
+  <div class="key-strip" id="keyStrip">
+    <span class="small">SHARED KEY</span>
+    <div id="keyGlyphs" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
+  </div>
+  <div class="sift-note" id="siftNote"></div>
+
+  <div class="mission-report" id="missionReport">
+    <div class="mr-header">MISSION REPORT</div>
+    <div class="mr-grid">
+      <div class="mr-item"><div class="mr-label">Photons Sent</div><div class="mr-value" id="mrSent">0</div></div>
+      <div class="mr-item"><div class="mr-label">Shared Key Length</div><div class="mr-value" id="mrKey">0</div></div>
+      <div class="mr-item"><div class="mr-label">Check Bits</div><div class="mr-value" id="mrCheck">0</div></div>
+      <div class="mr-item"><div class="mr-label">Errors Found</div><div class="mr-value" id="mrErrors">0</div></div>
+      <div class="mr-item"><div class="mr-label">QBER</div><div class="mr-value" id="mrQber">0%</div></div>
+    </div>
+    <div class="mr-status" id="mrStatus"></div>
+  </div>
+
+  <div class="log-wrap">
+    <table>
+      <thead><tr>
+        <th>#</th><th>Alice basis/bit</th><th>Eve basis/bit</th><th>Bob basis/bit</th><th>Sifted</th><th>Result</th>
+      </tr></thead>
+      <tbody id="logBody"></tbody>
+    </table>
+  </div>
+
+  <details class="legend">
+    <summary>How BB84 works</summary>
+    <div class="legend-grid">
+      <div><b>1. Encode.</b> Alice picks a random bit and a random basis (rectilinear + or diagonal ×) and sends one photon per bit, polarized accordingly.</div>
+      <div><b>2. Measure.</b> Bob picks a random basis for each incoming photon and measures it. If his basis matches Alice's, he gets her bit exactly. If not, the result is random.</div>
+      <div><b>3. Sift (discard the mismatches).</b> Alice and Bob publicly compare which <i>basis</i> they used for each photon — never the bits. Wherever their bases disagree, Bob's reading was a random 50/50 guess with no real information in it, so that position is thrown away entirely. Only photons where both happened to pick the same basis are kept; on average that's about half of them.</div>
+      <div><b>4. Check.</b> They sacrifice a random sample of sifted bits to compare openly. Any mismatch reveals errors — a natural fingerprint of eavesdropping.</div>
+      <div><b>5. Why Eve gets caught.</b> Eve doesn't know Alice's basis either. Measuring in the wrong basis collapses the photon's state, so when she resends it, she introduces errors roughly 25% of the time on bits she guessed wrong — pushing the error rate above the ~11% threshold Alice and Bob can tolerate.</div>
+      <div><b>6. Final key.</b> The remaining, unrevealed sifted bits — proven low-error — become the shared secret key.</div>
+    </div>
+    <table class="basis-table">
+      <thead>
+        <tr><th>Basis</th><th>Bit 0</th><th>Bit 1</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Rectilinear <span style="color:var(--rect)">(+)</span></td>
+          <td><span class="basis-table-glyph" style="color:var(--rect)">—</span> horizontal</td>
+          <td><span class="basis-table-glyph" style="color:var(--rect)">|</span> vertical</td>
+        </tr>
+        <tr>
+          <td>Diagonal <span style="color:var(--diag)">(×)</span></td>
+          <td><span class="basis-table-glyph" style="color:var(--diag)">╱</span> 45°</td>
+          <td><span class="basis-table-glyph" style="color:var(--diag)">╲</span> 135°</td>
+        </tr>
+      </tbody>
+    </table>
+  </details>
+
+</div>
+
+<script>
+(function(){
+  const COLORS = { rect:'#4DD8E8', diag:'#B57BF5', red:'#FF6B6B', green:'#6EE7A0', void:'#0A0D14', faint:'#4B5670' };
+  const ANGLE = { rect:[0,90], diag:[45,135] }; // [bit0deg, bit1deg]
+
+  // ---------- state ----------
+  let mode = 'explore';
+  let eveOn = false;
+  let running = false;
+  let N = 16;
+  let speed = 1;
+  let armedBasis = null;      // clicked chip awaiting slot tap
+  let gameQueue = [];         // photons awaiting eve choice in game mode
+  let roundPhotons = [];      // full processed log for current round
+  let bestStreak = 0;
+  let liveScore = 0;
+  let lastErrors = [];   // check-bit mismatches from the most recent round, for Replay Errors
+
+  const el = id => document.getElementById(id);
+  const logBody = el('logBody');
+  const beamCanvas = el('beam');
+  const ctx = beamCanvas.getContext('2d');
+  const ambientCanvas = el('ambient');
+  const actx = ambientCanvas.getContext('2d');
+
+  // ---------- helpers ----------
+  const rb = () => Math.random() < 0.5 ? 0 : 1;
+  const rbasis = () => Math.random() < 0.5 ? 'rect' : 'diag';
+  function glyph(basis, bit){
+    if(basis==='rect') return bit===0 ? '—' : '|';
+    return bit===0 ? '╱' : '╲';
+  }
+  function measure(sourceBasis, sourceBit, measureBasis){
+    if(sourceBasis === measureBasis) return sourceBit;
+    return rb();
+  }
+
+  // ---------- persistent best score ----------
+  async function loadBest(){
+    try{
+      const r = await window.storage.get('bb84:best-streak');
+      if(r && r.value){ bestStreak = parseInt(r.value) || 0; el('statStreak').textContent = bestStreak; }
+    }catch(e){ /* no record yet */ }
+  }
+  async function saveBest(){
+    try{ await window.storage.set('bb84:best-streak', String(bestStreak)); }catch(e){}
+  }
+  loadBest();
+
+  // ---------- canvas: ambient decorative loop ----------
+  let ambientParticles = Array.from({length:6}, (_,i)=>({
+    x: -20 - i*40, basis: rbasis(), bit: rb(), speed: 0.6+Math.random()*0.4
+  }));
+  function drawAmbient(){
+    actx.clearRect(0,0,220,64);
+    ambientParticles.forEach(p=>{
+      p.x += p.speed;
+      if(p.x > 240){ p.x = -20; p.basis = rbasis(); p.bit = rb(); }
+      const color = p.basis==='rect' ? COLORS.rect : COLORS.diag;
+      actx.save();
+      actx.translate(p.x, 32);
+      actx.globalAlpha = 0.85;
+      actx.strokeStyle = color; actx.lineWidth = 2;
+      const deg = ANGLE[p.basis][p.bit];
+      actx.rotate(deg * Math.PI/180);
+      actx.beginPath(); actx.moveTo(0,-7); actx.lineTo(0,7); actx.stroke();
+      actx.beginPath(); actx.arc(0,0,2.2,0,7); actx.fillStyle=color; actx.fill();
+      actx.restore();
+    });
+    requestAnimationFrame(drawAmbient);
+  }
+  drawAmbient();
+
+  // ---------- main stage geometry ----------
+  const W = () => beamCanvas.width, H = () => beamCanvas.height;
+  const aliceX = 60, bobX = () => W()-60, midX = () => W()/2, trackY = () => H()/2;
+
+  function drawStageStatic(activeParticles){
+    ctx.clearRect(0,0,W(),H());
+    // track line
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6,8]);
+    ctx.beginPath(); ctx.moveTo(aliceX, trackY()); ctx.lineTo(bobX(), trackY()); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // stations
+    drawStation(aliceX, trackY(), COLORS.diag, 'A');
+    drawStation(bobX(), trackY(), COLORS.rect, 'B');
+    const eveActive = (mode==='explore' && eveOn) || mode==='game';
+    drawStation(midX(), trackY(), eveActive ? COLORS.red : 'rgba(255,107,107,0.25)', 'E', !eveActive);
+
+    (activeParticles||[]).forEach(drawParticle);
+  }
+  function drawStation(x,y,color,letter,dim){
+    ctx.save();
+    ctx.globalAlpha = dim ? 0.35 : 1;
+    ctx.beginPath(); ctx.arc(x,y,16,0,Math.PI*2);
+    ctx.fillStyle = 'rgba(255,255,255,0.03)'; ctx.fill();
+    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = color; ctx.font = '600 12px Space Grotesk, sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(letter, x, y);
+    ctx.restore();
+  }
+  function drawParticle(p){
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    if(p.pulseColor){
+      ctx.save();
+      ctx.strokeStyle = p.pulseColor; ctx.globalAlpha = 0.55; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0,0,15,0,Math.PI*2); ctx.stroke();
+      ctx.restore();
+    }
+    ctx.shadowColor = p.pulseColor || p.color; ctx.shadowBlur = p.flash ? 24 : 10;
+    ctx.strokeStyle = p.color; ctx.fillStyle = p.color; ctx.lineWidth = 2.4;
+    ctx.rotate(p.angle * Math.PI/180);
+    ctx.beginPath(); ctx.moveTo(0,-9); ctx.lineTo(0,9); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0,0,3.4,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+  drawStageStatic();
+
+  // ---------- narration ----------
+  function narrate(text){
+    const n = el('narrationText');
+    n.style.opacity = 0;
+    setTimeout(()=>{ n.textContent = text; n.style.opacity = 1; }, 110);
+  }
+  const wait = ms => new Promise(res=>setTimeout(res, ms));
+
+  function setBasisTag(id, basis){
+    const node = el(id);
+    if(basis==null){ node.textContent = 'basis: —'; node.className = 'basis-tag'; return; }
+    node.textContent = 'basis: ' + (basis==='rect' ? '⊕ rect' : '⊗ diag');
+    node.className = 'basis-tag ' + basis;
+  }
+  function resetBasisTags(){
+    setBasisTag('aliceBasisTag', null);
+    setBasisTag('eveBasisTag', null);
+    setBasisTag('bobBasisTag', null);
+  }
+
+  function stageMessage(key, rec, idx){
+    switch(key){
+      case 'sending':        return `Encoding photon ${idx+1} of ${N} in a randomly chosen basis…`;
+      case 'traveling':      return 'Photon is travelling toward Bob…';
+      case 'intercept':      return 'Eve intercepts the photon and must guess its basis…';
+      case 'eve-correct':    return 'Correct basis. The photon remains unchanged.';
+      case 'eve-incorrect':  return 'Incorrect basis. Measurement disturbed the quantum state.';
+      case 'to-bob':         return 'Photon continues on toward Bob…';
+      case 'bob-measure':    return 'Bob performs his measurement.';
+      default:                return '';
+    }
+  }
+
+  // ---------- animate a single photon travelling Alice -> (Eve) -> Bob ----------
+  // Returns a Promise that resolves once the photon reaches Bob.
+  // opts.onStage(stageKey) fires at each protocol stage transition for narration.
+  function animatePhoton(rec, opts){
+    opts = opts || {};
+    const onStage = opts.onStage || function(){};
+    return new Promise(resolve=>{
+      const spd = 2.5 + speed*2; // px per frame — slower base pace so the story reads clearly
+      const eveActive = rec.eBasis != null;
+      const correct = eveActive ? (rec.eBasis === rec.aBasis) : null;
+      let leg = 1; // 1: alice->eve(or bob), 1.5: eve measuring, 2: eve->bob
+      let x = aliceX;
+      const target1 = eveActive ? midX() : bobX();
+      let curAngle = ANGLE[rec.aBasis][rec.aBit];
+      let flashFrames = 0;
+      let resultAnnounced = false;
+
+      onStage('sending');
+      setBasisTag('aliceBasisTag', rec.aBasis);
+      setBasisTag('eveBasisTag', null);
+      setBasisTag('bobBasisTag', null);
+      setTimeout(()=> onStage('traveling'), 260);
+
+      function frame(){
+        const activeParticles = [];
+        let jitterX = 0, jitterY = 0;
+        if(leg===1){
+          x += spd;
+          if(x >= target1){
+            if(eveActive){ flashFrames = 26; leg = 1.5; onStage('intercept'); setBasisTag('eveBasisTag', rec.eBasis); }
+            else { onStage('bob-measure'); setBasisTag('bobBasisTag', rec.bBasis); resolve(); return; }
+          }
+        } else if(leg===1.5){
+          flashFrames--;
+          curAngle = ANGLE[rec.eBasis][rec.eBit];
+          if(!correct){ jitterX = (Math.random()-0.5)*7; jitterY = (Math.random()-0.5)*7; }
+          if(flashFrames===14 && !resultAnnounced){
+            resultAnnounced = true;
+            onStage(correct ? 'eve-correct' : 'eve-incorrect');
+          }
+          if(flashFrames<=0){ leg = 2; onStage('to-bob'); }
+        } else if(leg===2){
+          x += spd;
+          if(x >= bobX()){ onStage('bob-measure'); setBasisTag('bobBasisTag', rec.bBasis); resolve(); return; }
+        }
+        const p = { x: x+jitterX, y: trackY()+jitterY, angle: curAngle,
+          color: leg<1.5 ? (rec.aBasis==='rect'?COLORS.rect:COLORS.diag) : (rec.eBasis==='rect'?COLORS.rect:COLORS.diag),
+          flash: leg===1.5,
+          pulseColor: leg===1.5 ? (correct ? COLORS.green : COLORS.red) : null };
+        activeParticles.push(p);
+        drawStageStatic(activeParticles);
+        requestAnimationFrame(frame);
+      }
+      frame();
+    });
+  }
+
+  // ---------- logging / stats ----------
+  function resetRoundUI(){
+    logBody.innerHTML = '';
+    roundPhotons = [];
+    lastErrors = [];
+    el('statSent').textContent = '0';
+    el('statSifted').textContent = '0';
+    el('statQber').textContent = '—';
+    el('statScore').textContent = '0';
+    el('banner').className = 'banner';
+    liveScore = 0;
+    el('missionReport').classList.remove('show');
+    el('mrStatus').className = 'mr-status';
+    el('mrSent').textContent='0'; el('mrKey').textContent='0'; el('mrCheck').textContent='0';
+    el('mrErrors').textContent='0'; el('mrQber').textContent='0%';
+    el('keyStrip').style.display = 'none';
+    el('keyGlyphs').innerHTML = '';
+    el('siftNote').classList.remove('show');
+    el('siftNote').innerHTML = '';
+    el('replayBtn').style.display = 'none';
+    resetBasisTags();
+    narrate(mode==='game' ? 'Alice is preparing random secret bits to send toward Bob…' : 'Ready — press Start Transmission to begin.');
+  }
+
+  function countUp(elId, target, duration){
+    duration = duration || 650;
+    const node = el(elId);
+    const startT = performance.now();
+    function step(t){
+      const p = Math.min(1, (t-startT)/duration);
+      node.textContent = Math.round(target*p);
+      if(p<1) requestAnimationFrame(step); else node.textContent = target;
+    }
+    requestAnimationFrame(step);
+  }
+
+  function logRow(rec, idx){
+    const sifted = rec.aBasis === rec.bBasis;
+    const tr = document.createElement('tr');
+    tr.id = `row-${idx}`;
+    tr.innerHTML = `
+      <td>${idx+1}</td>
+      <td><span style="color:${rec.aBasis==='rect'?COLORS.rect:COLORS.diag}">${glyph(rec.aBasis,rec.aBit)}</span> ${rec.aBasis} / ${rec.aBit}</td>
+      <td>${rec.eBasis!=null ? `<span style="color:${rec.eBasis==='rect'?COLORS.rect:COLORS.diag}">${glyph(rec.eBasis,rec.eBit)}</span> ${rec.eBasis} / ${rec.eBit}` : '<span style="color:var(--faint)">—</span>'}</td>
+      <td><span style="color:${rec.bBasis==='rect'?COLORS.rect:COLORS.diag}">${glyph(rec.bBasis,rec.bBit)}</span> ${rec.bBasis} / ${rec.bBit}</td>
+      <td>${sifted ? '<span class="pill match">kept</span>' : '<span class="pill mismatch">discard</span>'}</td>
+      <td id="result-${idx}"><span class="pill mismatch">pending</span></td>
+    `;
+    if(!sifted){
+      const stamp = document.createElement('div');
+      stamp.className = 'discard-stamp';
+      stamp.textContent = 'DISCARDED';
+      tr.appendChild(stamp);
+    }
+    logBody.appendChild(tr);
+    logBody.parentElement.scrollTop = logBody.parentElement.scrollHeight;
+  }
+
+  // ---------- animate the sifting stage: kept bits flow into the key, discarded ones fade ----------
+  async function animateSifting(){
+    narrate("Alice and Bob compare only their bases out loud — never the bits themselves.");
+    await wait(900);
+    narrate("Wherever their bases don't match, Bob's result was a blind guess and gets thrown out.");
+    await wait(200);
+    const keyGlyphsEl = el('keyGlyphs');
+    keyGlyphsEl.innerHTML = '';
+    el('keyStrip').style.display = 'flex';
+    let keptCount = 0, discardCount = 0;
+    for(const r of roundPhotons){
+      const row = document.getElementById(`row-${r.idx}`);
+      if(r.aBasis === r.bBasis){
+        keptCount++;
+        if(row) row.classList.add('kept-flow');
+        const span = document.createElement('span');
+        span.className = 'key-glyph';
+        span.textContent = glyph(r.aBasis, r.aBit);
+        span.style.color = r.aBasis==='rect' ? COLORS.rect : COLORS.diag;
+        keyGlyphsEl.appendChild(span);
+      } else {
+        discardCount++;
+        if(row){
+          row.classList.add('discarded-fade');
+          const stamp = row.querySelector('.discard-stamp');
+          if(stamp) stamp.classList.add('show');
+        }
+      }
+      await wait(35);
+    }
+    const siftNote = el('siftNote');
+    if(siftNote){
+      siftNote.innerHTML = `<b>${discardCount} of ${roundPhotons.length} photons discarded.</b> `
+        + `Whenever Bob's randomly-chosen basis didn't match Alice's, quantum mechanics guarantees his measurement was a 50/50 coin flip — `
+        + `not a corrupted signal, just no signal at all. Neither of them can fix that after the fact, so those positions are dropped entirely. `
+        + `Only the ${keptCount} photons where their bases happened to agree carry real information, and become the sifted key.`;
+      siftNote.classList.add('show');
+    }
+    narrate(`Sifting complete: ${discardCount} discarded, ${keptCount} kept as the sifted key.`);
+    await wait(500);
+  }
+
+  async function finalizeRoundNarrated(){
+    const sifted = roundPhotons.filter(r=>r.aBasis===r.bBasis);
+
+    await animateSifting();
+    narrate('Generating the final shared key from the surviving bits…');
+    await wait(650);
+    narrate('Testing a random sample of the key for errors…');
+    await wait(650);
+
+    // reveal ~half of sifted bits as public check bits
+    const shuffled = [...sifted].sort(()=>Math.random()-0.5);
+    const checkCount = Math.max(1, Math.floor(sifted.length/2));
+    const checkSet = new Set(shuffled.slice(0,checkCount).map(r=>r.idx));
+
+    let errors = 0;
+    lastErrors = [];
+    sifted.forEach(r=>{
+      const isCheck = checkSet.has(r.idx);
+      const isError = r.aBit !== r.bBit;
+      const cell = document.getElementById(`result-${r.idx}`);
+      if(isCheck && isError){ errors++; lastErrors.push(r); }
+      if(isCheck){
+        cell.innerHTML = isError ? '<span class="pill error">check · MISMATCH</span>' : '<span class="pill check">check · ok</span>';
+      } else {
+        cell.innerHTML = '<span class="pill match">final key bit</span>';
+      }
+    });
+
+    const qber = checkCount ? errors/checkCount : 0;
+    const threshold = 0.11;
+    const detected = qber > threshold;
+
+    countUp('statSent', roundPhotons.length);
+    countUp('statSifted', sifted.length);
+    el('statQber').textContent = (qber*100).toFixed(1)+'%';
+
+    const banner = el('banner');
+    if(mode==='game'){
+      if(detected){
+        banner.textContent = '🚨 Eve detected! Error rate spiked — Alice & Bob abort the key. Secret bits stolen: 0.';
+        banner.className = 'banner show caught';
+        liveScore = 0;
+      } else {
+        const finalKeyBits = sifted.filter(r=>!checkSet.has(r.idx));
+        const stolen = finalKeyBits.filter(r=> r.eBasis != null && r.eBasis === r.aBasis).length;
+        liveScore = stolen;
+        banner.textContent = `✅ Eve escapes undetected! QBER stayed under 11% — stole ${stolen} of ${finalKeyBits.length} final key bits.`;
+        banner.className = 'banner show escaped';
+        if(stolen > bestStreak){ bestStreak = stolen; countUp('statStreak', bestStreak); saveBest(); }
+      }
+      countUp('statScore', liveScore);
+    } else {
+      if(detected){
+        banner.textContent = `🚨 Statistically significant errors (QBER ${(qber*100).toFixed(1)}%) — an eavesdropper is almost certainly on the line.`;
+        banner.className = 'banner show caught';
+      } else {
+        banner.textContent = `✅ Channel looks clean (QBER ${(qber*100).toFixed(1)}%) — safe to use the ${sifted.length-checkCount} remaining bits as key.`;
+        banner.className = 'banner show escaped';
+      }
+    }
+
+    // ---- Mission Report reveal ----
+    el('missionReport').classList.add('show');
+    countUp('mrSent', roundPhotons.length);
+    countUp('mrKey', sifted.length - checkCount);
+    countUp('mrCheck', checkCount);
+    countUp('mrErrors', errors);
+    await wait(500);
+    el('mrQber').textContent = (qber*100).toFixed(1)+'%';
+    const mrStatus = el('mrStatus');
+    if(detected){
+      mrStatus.innerHTML = '🚨 <b>Eavesdropping Detected</b><br>Transmission Aborted';
+      mrStatus.className = 'mr-status show caught';
+    } else {
+      mrStatus.innerHTML = '✅ <b>Secure Communication Established</b><br>Shared Secret Key Generated';
+      mrStatus.className = 'mr-status show escaped';
+    }
+
+    el('replayBtn').style.display = lastErrors.length ? 'inline-block' : 'none';
+    narrate(detected ? 'Eavesdropping detected — transmission aborted.' : 'Secure key established.');
+
+    running = false;
+    el('runBtn').disabled = false;
+    el('nSlider').disabled = false;
+    updateRunButton();
+  }
+
+  // ---------- EXPLORE MODE runner ----------
+  async function runExploreRound(){
+    resetRoundUI();
+    running = true; el('runBtn').disabled = true; el('nSlider').disabled = true;
+    narrate('Alice is preparing random secret bits…');
+    await wait(650);
+    for(let i=0; i<N; i++){
+      const aBasis = rbasis(), aBit = rb();
+      const bBasis = rbasis();
+      let eBasis=null, eBit=null, bSourceBasis=aBasis, bSourceBit=aBit;
+      if(eveOn){
+        eBasis = rbasis();
+        eBit = measure(aBasis, aBit, eBasis);
+        bSourceBasis = eBasis; bSourceBit = eBit; // Eve resends what she measured
+      }
+      const bBit = measure(bSourceBasis, bSourceBit, bBasis);
+      const rec = { idx:i, aBasis, aBit, eBasis, eBit, bBasis, bBit };
+      roundPhotons.push(rec);
+      logRow(rec, i);
+      await animatePhoton(rec, { onStage: stage => narrate(stageMessage(stage, rec, i)) });
+      await wait(500); // let Bob's (and Eve's) revealed basis tag actually be visible before the next photon starts
+    }
+    await finalizeRoundNarrated();
+  }
+
+  // ---------- GAME MODE runner ----------
+  function runGameRound(){
+    resetRoundUI();
+    running = true; el('runBtn').disabled = true; el('nSlider').disabled = true;
+    narrate('Alice is preparing random secret bits, one photon at a time…');
+    gameQueue = Array.from({length:N}, () => ({ aBasis: rbasis(), aBit: rb(), bBasis: rbasis() }));
+    setTimeout(processNextGamePhoton, 650);
+  }
+  let gameIdx = 0;
+  function processNextGamePhoton(){
+    if(gameIdx >= gameQueue.length){ finalizeRoundNarrated(); return; }
+    const slot = el('dropSlot');
+    slot.className = 'slot empty';
+    slot.innerHTML = '';
+    slot.dataset.ready = '1';
+    narrate('Incoming photon. Choose a basis to measure.');
+  }
+  async function commitEveChoice(basisChoice){
+    const slot = el('dropSlot');
+    if(slot.dataset.ready !== '1') return;
+    slot.dataset.ready = '0';
+    slot.className = 'slot';
+    narrate('Measuring…');
+    await wait(500);
+
+    const q = gameQueue[gameIdx];
+    const eBasis = basisChoice;
+    const eBit = measure(q.aBasis, q.aBit, eBasis);
+    const bBit = measure(eBasis, eBit, q.bBasis);
+    const rec = { idx: gameIdx, aBasis:q.aBasis, aBit:q.aBit, eBasis, eBit, bBasis:q.bBasis, bBit };
+    roundPhotons.push(rec);
+    logRow(rec, gameIdx);
+
+    const correct = eBasis === q.aBasis;
+    slot.className = 'slot filled';
+    slot.innerHTML = correct
+      ? `<span style="color:${COLORS.green}">✓ correct basis</span> — photon remains unchanged, forwarded to Bob`
+      : `<span style="color:${COLORS.red}">✕ wrong basis</span> — quantum state disturbed, forwarded to Bob`;
+
+    await animatePhoton(rec, { onStage: stage => {
+      if(stage==='intercept' || stage==='eve-correct' || stage==='eve-incorrect') return; // already shown in the slot above
+      narrate(stageMessage(stage, rec, gameIdx));
+    }});
+    narrate(correct ? 'Correct basis. The photon remains unchanged.' : 'Incorrect basis. Measurement disturbed the quantum state.');
+    await wait(900);
+
+    gameIdx++;
+    slot.innerHTML = '';
+    await wait(150);
+    processNextGamePhoton();
+  }
+
+  // ---------- UI wiring ----------
+  el('nSlider').addEventListener('input', e=>{ N = parseInt(e.target.value); el('nVal').textContent = N; });
+  el('speedSlider').addEventListener('input', e=>{ speed = parseInt(e.target.value); });
+
+  el('eveSwitch').addEventListener('click', ()=>{
+    if(running) return;
+    eveOn = !eveOn;
+    el('eveSwitch').classList.toggle('on', eveOn);
+    drawStageStatic();
+  });
+
+  document.querySelectorAll('.tab').forEach(t=>{
+    t.addEventListener('click', ()=>{
+      if(running) return;
+      mode = t.dataset.mode;
+      document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+      t.classList.add('active');
+      el('gamePanel').classList.toggle('active', mode==='game');
+      el('exploreToggleWrap').style.display = mode==='explore' ? 'flex' : 'none';
+      el('speedGroup').style.display = mode==='explore' ? 'flex' : 'none';
+      el('scoreLabel').textContent = mode==='game' ? 'Secret Bits Stolen' : 'Round Score';
+      el('streakCard').style.display = mode==='game' ? 'block' : 'none';
+      resetRoundUI();
+      drawStageStatic();
+      updateRunButton();
+    });
+  });
+  function updateRunButton(){
+    el('runBtn').textContent = 'Start Transmission';
+  }
+  updateRunButton();
+
+  el('runBtn').addEventListener('click', ()=>{
+    if(running) return;
+    gameIdx = 0;
+    if(mode==='explore') runExploreRound(); else runGameRound();
+  });
+  el('resetBtn').addEventListener('click', ()=>{
+    if(running) return;
+    resetRoundUI(); drawStageStatic();
+    el('nSlider').disabled = false;
+    const slot = el('dropSlot'); slot.className='slot empty'; slot.innerHTML=''; slot.dataset.ready='0';
+  });
+
+  // ---------- Replay Errors ----------
+  el('replayBtn').addEventListener('click', async ()=>{
+    if(running || !lastErrors.length) return;
+    running = true; el('replayBtn').disabled = true; el('runBtn').disabled = true;
+    document.querySelectorAll('tbody tr').forEach(tr=>tr.classList.remove('replay-highlight'));
+    narrate(`Replaying ${lastErrors.length} error photon${lastErrors.length>1?'s':''}…`);
+    await wait(750);
+    for(const r of lastErrors){
+      document.querySelectorAll('tbody tr').forEach(tr=>tr.classList.remove('replay-highlight'));
+      const row = document.getElementById(`row-${r.idx}`);
+      if(row){ row.classList.add('replay-highlight'); row.scrollIntoView({ block:'center', behavior:'smooth' }); }
+      const why = (r.eBasis === r.aBasis)
+        ? `Eve happened to match Alice's ${r.aBasis} basis, but Bob's independent ${r.bBasis} measurement still landed on a different bit by chance.`
+        : `Eve guessed the ${r.eBasis} basis while Alice actually used ${r.aBasis} — that wrong-basis measurement collapsed the photon into a new, random state, which Bob then read as ${r.bBit} instead of Alice's original ${r.aBit}.`;
+      narrate(`Photon ${r.idx+1}: Alice sent ${r.aBasis}/${r.aBit} · Eve measured ${r.eBasis}/${r.eBit} · Bob measured ${r.bBasis}/${r.bBit}. ${why}`);
+      await animatePhoton(r, { onStage: ()=>{} });
+      await wait(1300);
+    }
+    document.querySelectorAll('tbody tr').forEach(tr=>tr.classList.remove('replay-highlight'));
+    narrate('Replay complete — that disturbance is exactly how quantum measurement reveals an eavesdropper.');
+    running = false; el('replayBtn').disabled = false; el('runBtn').disabled = false;
+  });
+
+  // drag & drop chips
+  document.querySelectorAll('.chip').forEach(chip=>{
+    chip.addEventListener('dragstart', e=>{ e.dataTransfer.setData('text/plain', chip.dataset.basis); });
+    chip.addEventListener('click', ()=>{
+      document.querySelectorAll('.chip').forEach(c=>c.classList.remove('armed'));
+      if(armedBasis === chip.dataset.basis){ armedBasis = null; }
+      else { armedBasis = chip.dataset.basis; chip.classList.add('armed'); }
+    });
+  });
+  const slotEl = el('dropSlot');
+  slotEl.addEventListener('dragover', e=>{ e.preventDefault(); slotEl.classList.add('dragover'); });
+  slotEl.addEventListener('dragleave', ()=> slotEl.classList.remove('dragover'));
+  slotEl.addEventListener('drop', e=>{
+    e.preventDefault(); slotEl.classList.remove('dragover');
+    const basis = e.dataTransfer.getData('text/plain');
+    if(basis) commitEveChoice(basis);
+  });
+  slotEl.addEventListener('click', ()=>{
+    if(armedBasis){
+      commitEveChoice(armedBasis);
+      document.querySelectorAll('.chip').forEach(c=>c.classList.remove('armed'));
+      armedBasis = null;
+    }
+  });
+
+  window.addEventListener('resize', ()=>{
+    beamCanvas.width = beamCanvas.clientWidth || 1100;
+    drawStageStatic();
+  });
+})();
+</script>
+</body>
+</html>
