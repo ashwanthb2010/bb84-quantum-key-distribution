@@ -6,7 +6,7 @@ The project allows users to explore the communication between **Alice, Bob, and 
 
 ## 🚀 Try the Interactive Simulator
 
-**[Launch the BB84 Simulator](https://ashwanthb2010.github.io/bb84-quantum-key-distribution/bb84_simulator.html)** — Watch Alice and Bob exchange quantum keys in real-time, and play as Eve to try stealing the secret key without getting caught!
+**[Launch the BB84 Simulator](https://github.com/ashwanthb2010/bb84-quantum-key-distribution/blob/main/bb84_simulator.html)** — Watch Alice and Bob exchange quantum keys in real-time, and play as Eve to try[...]
 
 > 🚧 **Status: In Development**
 
